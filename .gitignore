@@ -1,0 +1,11 @@
+bin/
+obj/
+publish/
+.vs/
+*.user
+TestResults/
+
+# Never commit real firewall configurations or conversion output.
+*.conf
+*-preview.txt
+*-report.html

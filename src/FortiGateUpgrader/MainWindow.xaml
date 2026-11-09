@@ -1,0 +1,286 @@
+﻿<Window x:Class="FortiGateUpgrader.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:FortiGateUpgrader.Views"
+        Title="FortiGate Config Upgrader" Icon="/Assets/app.ico" Height="820" Width="1400" MinHeight="600" MinWidth="1000"
+        WindowStartupLocation="CenterScreen" Background="White" FontFamily="Segoe UI" FontSize="13"
+        AllowDrop="True" Drop="Window_Drop" Closing="Window_Closing">
+    <Window.Resources>
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="14,5" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="MinWidth" Value="90" />
+        </Style>
+        <Style x:Key="SectionHeader" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Margin" Value="0,12,0,4" />
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Step 1: load + choose target -->
+        <Border DockPanel.Dock="Top" Background="#F3F4F6" BorderBrush="#E5E7EB" BorderThickness="0,0,0,1" Padding="12,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="1" Style="{StaticResource SectionHeader}" Margin="0,0,6,0" Foreground="#2563EB" FontSize="16" VerticalAlignment="Center" />
+                    <Button x:Name="OpenButton" Content="Open config…" Click="OpenButton_Click" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0">
+                    <TextBlock x:Name="SourceSummary" Text="No configuration loaded." TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="SourceFile" Foreground="#6B7280" FontSize="11" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="2" Foreground="#2563EB" FontSize="16" FontWeight="SemiBold" Margin="0,0,6,0" VerticalAlignment="Center" />
+                    <TextBlock Text="New model:" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <ComboBox x:Name="TargetCombo" Width="170" IsEnabled="False" SelectionChanged="TargetCombo_SelectionChanged" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Step 4: export -->
+        <Border DockPanel.Dock="Bottom" Background="#F3F4F6" BorderBrush="#E5E7EB" BorderThickness="0,1,0,0" Padding="12,10">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button x:Name="ExportButton" Content="Export converted config…" IsEnabled="False" Click="ExportButton_Click" FontWeight="SemiBold" Margin="0" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="4" Foreground="#2563EB" FontSize="16" FontWeight="SemiBold" Margin="0,0,6,0" VerticalAlignment="Center" />
+                    <TextBlock Text="New hostname (optional):" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <TextBox x:Name="HostnameBox" Width="240" VerticalContentAlignment="Center" Padding="3" TextChanged="HostnameBox_TextChanged" />
+                    <TextBlock x:Name="ExportStatus" Margin="14,0,0,0" VerticalAlignment="Center" Foreground="#6B7280" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Side panel -->
+        <Border x:Name="SidePanel" DockPanel.Dock="Right" Width="340" BorderBrush="#E5E7EB" BorderThickness="1,0,0,0">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="12,4,12,12">
+                    <TextBlock Text="Status" Style="{StaticResource SectionHeader}" />
+                    <ItemsControl x:Name="ProblemList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Text}" Foreground="{Binding Brush}" TextWrapping="Wrap" Margin="0,2" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="Port details" Style="{StaticResource SectionHeader}" />
+                    <TextBlock x:Name="PortDetails" TextWrapping="Wrap" Foreground="#374151"
+                               Text="Click a port to see how it is used. Hover for a quick summary." />
+
+                    <TextBlock Text="How to use" Style="{StaticResource SectionHeader}" />
+                    <TextBlock TextWrapping="Wrap" Foreground="#374151">
+                        • Drag from a port on the current firewall to a port on the new one.<LineBreak />
+                        • Drag a connected port to move its line; drop on empty space to remove it.<LineBreak />
+                        • Click a line and press Delete to remove it. Esc cancels a drag.<LineBreak />
+                        • Ports you leave unmapped are not converted.
+                    </TextBlock>
+
+                    <TextBlock Text="Legend" Style="{StaticResource SectionHeader}" />
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2"><Rectangle Width="26" Height="4" Fill="#16A34A" Margin="0,0,8,0" VerticalAlignment="Center" /><TextBlock Text="One port to one port (OK)" /></StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2"><Rectangle Width="26" Height="4" Fill="#DC2626" Margin="0,0,8,0" VerticalAlignment="Center" /><TextBlock Text="Conflict – two ports on one port" /></StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2"><Border Width="26" Height="16" BorderBrush="#F59E0B" BorderThickness="3" Background="#374151" Margin="0,0,8,0" /><TextBlock Text="In use, not mapped (won't be converted)" /></StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2"><Ellipse Width="9" Height="9" Fill="#2563EB" Margin="8,0,17,0" VerticalAlignment="Center" /><TextBlock Text="Port carries configuration" /></StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2"><Border Width="26" Height="16" Background="#374151" Margin="0,0,8,0" /><TextBlock Text="RJ45" /></StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2"><Border Width="26" Height="16" Background="#475569" Margin="0,0,8,0" /><TextBlock Text="RJ45 / SFP shared" /></StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2"><Border Width="26" Height="16" Background="#64748B" Margin="0,0,8,0" /><TextBlock Text="SFP / SFP+" /></StackPanel>
+                    </StackPanel>
+
+                    <TextBlock Text="Reference photos" Style="{StaticResource SectionHeader}" />
+                    <TextBlock x:Name="SourcePhotoCaption" Foreground="#6B7280" FontSize="11" />
+                    <Image x:Name="SourcePhoto" MaxHeight="150" Stretch="Uniform" HorizontalAlignment="Left" />
+                    <TextBlock x:Name="TargetPhotoCaption" Foreground="#6B7280" FontSize="11" Margin="0,6,0,0" />
+                    <Image x:Name="TargetPhoto" MaxHeight="150" Stretch="Uniform" HorizontalAlignment="Left" />
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Step 3: mapping, configs and differences -->
+        <TabControl x:Name="Tabs" Margin="8,8,0,0" SelectionChanged="Tabs_SelectionChanged" BorderThickness="0,1,0,0">
+            <TabItem x:Name="MapTab" Header="Port mapping">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Orientation="Horizontal" Margin="4,10,12,0">
+                        <TextBlock Text="3" Foreground="#2563EB" FontSize="16" FontWeight="SemiBold" Margin="0,0,6,0" VerticalAlignment="Center" />
+                        <TextBlock Text="Map the ports" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,14,0" />
+                        <Button x:Name="AutoMapButton" Content="Auto-map" IsEnabled="False" Click="AutoMapButton_Click"
+                                ToolTip="Connect ports with the same front-panel label or name" />
+                        <Button x:Name="ClearButton" Content="Clear all" IsEnabled="False" Click="ClearButton_Click" />
+                    </StackPanel>
+                    <Viewbox Grid.Row="1" Stretch="Uniform" StretchDirection="DownOnly" Margin="12">
+                        <views:PortMapView x:Name="MapView" />
+                    </Viewbox>
+                </Grid>
+            </TabItem>
+
+            <TabItem x:Name="IpsecTab" Header="IPsec keys">
+                <DockPanel Margin="12,10,12,8">
+                    <StackPanel DockPanel.Dock="Top">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="3b" Foreground="#2563EB" FontSize="16" FontWeight="SemiBold" Margin="0,0,6,0" VerticalAlignment="Center" />
+                            <TextBlock Text="New IPsec local IDs and pre-shared keys" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock x:Name="IpsecIntro" TextWrapping="Wrap" Margin="0,6,0,8" Foreground="#374151" />
+                        <Border x:Name="IpsecWarning" Background="#FEF3C7" BorderBrush="#F59E0B" BorderThickness="1" Padding="10,6" Margin="0,0,0,10" CornerRadius="3">
+                            <TextBlock TextWrapping="Wrap">
+                                <Run FontWeight="SemiBold">Keys are shown and saved in clear text.</Run>
+                                They are written into the exported .conf file (not the report) and are visible in the Compare &amp; edit tab.
+                                Keep the exported file private, don't email it or save it to shared folders, and delete it once the new firewall is set up.
+                                The keys are not stored anywhere else and are forgotten when the app closes.
+                            </TextBlock>
+                        </Border>
+                    </StackPanel>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="TunnelList" Grid.IsSharedSizeScope="True">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="4" Padding="10,8" Margin="0,0,0,8" Background="{Binding RowBackground}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" MinWidth="260" />
+                                                <ColumnDefinition Width="Auto" SharedSizeGroup="id" />
+                                                <ColumnDefinition Width="Auto" SharedSizeGroup="psk" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Margin="0,0,16,0">
+                                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="14" />
+                                                <TextBlock Text="{Binding Details}" Foreground="#6B7280" TextWrapping="Wrap" Margin="0,2,0,0" />
+                                                <TextBlock Text="{Binding Status}" Foreground="{Binding StatusBrush}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Margin="0,0,12,0" Width="230">
+                                                <TextBlock Text="New local ID" Foreground="#374151" Margin="0,0,0,2" />
+                                                <TextBox Text="{Binding LocalId, UpdateSourceTrigger=PropertyChanged}" Padding="3" FontFamily="Cascadia Mono, Consolas" />
+                                                <TextBlock Text="{Binding CurrentLocalId}" Foreground="#6B7280" FontSize="11" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2" Width="260">
+                                                <TextBlock Text="Pre-shared key (clear text)" Foreground="#374151" Margin="0,0,0,2" />
+                                                <TextBox Text="{Binding PreSharedKey, UpdateSourceTrigger=PropertyChanged}" Padding="3" FontFamily="Cascadia Mono, Consolas" />
+                                                <TextBlock Text="6–128 characters; no double quotes or backslashes" Foreground="#6B7280" FontSize="11" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem x:Name="CompareTab" Header="Compare &amp; edit">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F9FAFB" BorderBrush="#E5E7EB" BorderThickness="0,0,0,1" Padding="10,6">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <CheckBox x:Name="SyncScrollBox" Content="Scroll together" IsChecked="True" VerticalAlignment="Center" Margin="0,0,14,0"
+                                          ToolTip="Keep the matching lines of both sides in view" />
+                                <Button Content="▲ Previous change" Click="PrevChange_Click" MinWidth="0" />
+                                <Button Content="Next change ▼" Click="NextChange_Click" MinWidth="0" Margin="0" />
+                            </StackPanel>
+                            <WrapPanel VerticalAlignment="Center">
+                                <TextBlock x:Name="DiffSummary" VerticalAlignment="Center" Margin="0,0,14,0" />
+                                <Border Background="#BBF7D0" Width="14" Height="12" Margin="0,0,4,0" VerticalAlignment="Center" />
+                                <TextBlock Text="changed text" Foreground="#6B7280" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                <Border Background="#ECFDF5" BorderBrush="#BBF7D0" BorderThickness="1" Width="14" Height="12" Margin="0,0,4,0" VerticalAlignment="Center" />
+                                <TextBlock Text="changed line" Foreground="#6B7280" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                <Border Background="#DC2626" Width="14" Height="3" Margin="0,0,4,0" VerticalAlignment="Center" />
+                                <TextBlock Text="lines removed here" Foreground="#6B7280" VerticalAlignment="Center" />
+                            </WrapPanel>
+                        </DockPanel>
+                    </Border>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="250" />
+                            <ColumnDefinition Width="6" />
+                            <ColumnDefinition Width="*" MinWidth="250" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Left: original -->
+                        <DockPanel>
+                            <Border DockPanel.Dock="Top" Padding="10,6" BorderBrush="#E5E7EB" BorderThickness="0,0,0,1">
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Content="Save as…" Click="SaveOriginal_Click" Margin="0" MinWidth="0"
+                                            ToolTip="Save the original config, including your edits" />
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock x:Name="OriginalHeader" Text="Original config" FontWeight="SemiBold" />
+                                        <TextBlock Foreground="#6B7280" FontSize="11" TextWrapping="Wrap"
+                                                   Text="Editable. Click Apply changes to convert your edited version." />
+                                    </StackPanel>
+                                </DockPanel>
+                            </Border>
+                            <Border x:Name="OriginalDirtyBanner" DockPanel.Dock="Top" Background="#FEF3C7" BorderBrush="#F59E0B" BorderThickness="0,0,0,1" Padding="10,6" Visibility="Collapsed">
+                                <DockPanel>
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                        <Button Content="Apply changes" FontWeight="SemiBold" Click="ApplyOriginal_Click" MinWidth="0" />
+                                        <Button Content="Revert" Click="RevertOriginal_Click" Margin="0" MinWidth="0" />
+                                    </StackPanel>
+                                    <TextBlock TextWrapping="Wrap" VerticalAlignment="Center"
+                                               Text="Edits not applied yet. The conversion still uses the last applied version." />
+                                </DockPanel>
+                            </Border>
+                            <Border x:Name="OriginalEditedBanner" DockPanel.Dock="Top" Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="0,0,0,1" Padding="10,6" Visibility="Collapsed">
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Content="Reload from file" Click="ReloadOriginal_Click" Margin="0" MinWidth="0" />
+                                    <TextBlock TextWrapping="Wrap" VerticalAlignment="Center"
+                                               Text="The conversion uses your edited version (not the file on disk)." />
+                                </DockPanel>
+                            </Border>
+                            <views:ConfigEditor x:Name="OriginalEditor" />
+                        </DockPanel>
+
+                        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="#E5E7EB" ShowsPreview="False" />
+
+                        <!-- Right: converted -->
+                        <DockPanel Grid.Column="2">
+                            <Border DockPanel.Dock="Top" Padding="10,6" BorderBrush="#E5E7EB" BorderThickness="0,0,0,1">
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock x:Name="ConvertedHeader" Text="Converted config" FontWeight="SemiBold" />
+                                    <TextBlock Foreground="#6B7280" FontSize="11" TextWrapping="Wrap"
+                                               Text="Differences from the original are highlighted. Editable; Export saves it as shown." />
+                                </StackPanel>
+                            </Border>
+                            <Border x:Name="ConvertedPlaceholder" DockPanel.Dock="Top" Background="#F3F4F6" Padding="10,8" BorderBrush="#E5E7EB" BorderThickness="0,0,0,1">
+                                <TextBlock x:Name="ConvertedPlaceholderText" TextWrapping="Wrap" Text="Open a configuration and complete the port mapping to see the converted config." />
+                            </Border>
+                            <Border x:Name="ConvertedStaleBanner" DockPanel.Dock="Top" Background="#FEF3C7" BorderBrush="#F59E0B" BorderThickness="0,0,0,1" Padding="10,6" Visibility="Collapsed">
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Content="Regenerate (discard my edits)" Click="Regenerate_Click" Margin="0" MinWidth="0" />
+                                    <TextBlock TextWrapping="Wrap" VerticalAlignment="Center"
+                                               Text="The mapping, IPsec keys, hostname or original changed after you edited this. Your edits don't include those changes." />
+                                </DockPanel>
+                            </Border>
+                            <Border x:Name="ConvertedEditedBanner" DockPanel.Dock="Top" Background="#EFF6FF" BorderBrush="#BFDBFE" BorderThickness="0,0,0,1" Padding="10,6" Visibility="Collapsed">
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Content="Discard my edits" Click="Regenerate_Click" Margin="0" MinWidth="0" />
+                                    <TextBlock TextWrapping="Wrap" VerticalAlignment="Center"
+                                               Text="Edited by hand. Export saves this text as shown, after a syntax check." />
+                                </DockPanel>
+                            </Border>
+                            <Expander x:Name="MessagesExpander" DockPanel.Dock="Top" Header="Conversion messages" Padding="10,2" Visibility="Collapsed">
+                                <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl x:Name="MessageList" Margin="4,2,4,6">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Text}" Foreground="{Binding Brush}" TextWrapping="Wrap" Margin="0,1" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </Expander>
+                            <views:ConfigEditor x:Name="ConvertedEditor" />
+                        </DockPanel>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

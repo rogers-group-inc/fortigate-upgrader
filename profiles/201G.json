@@ -1,0 +1,282 @@
+{
+  "model": "201G",
+  "displayName": "FortiGate 201G",
+  "platform": "FORTIGATE-201G",
+  "configPrefix": "FGT201G",
+  "verified": false,
+  "notes": "Built from Fortinet hardware documentation; confirm names (especially ha/mgmt) against a real 201G config. Ports 9-16 are 5GE. X1/X2 are the default FortiLink ports.",
+  "image": "images/201g.png",
+  "ports": [
+    {
+      "name": "ha",
+      "label": "HA",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": false,
+      "row": 0,
+      "column": 0
+    },
+    {
+      "name": "mgmt",
+      "label": "MGMT",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": false,
+      "row": 1,
+      "column": 0
+    },
+    {
+      "name": "port1",
+      "label": "1",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": null,
+      "row": 0,
+      "column": 1.3
+    },
+    {
+      "name": "port2",
+      "label": "2",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": null,
+      "row": 1,
+      "column": 1.3
+    },
+    {
+      "name": "port3",
+      "label": "3",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": null,
+      "row": 0,
+      "column": 2.3
+    },
+    {
+      "name": "port4",
+      "label": "4",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": null,
+      "row": 1,
+      "column": 2.3
+    },
+    {
+      "name": "port5",
+      "label": "5",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": null,
+      "row": 0,
+      "column": 3.3
+    },
+    {
+      "name": "port6",
+      "label": "6",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": null,
+      "row": 1,
+      "column": 3.3
+    },
+    {
+      "name": "port7",
+      "label": "7",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": null,
+      "row": 0,
+      "column": 4.3
+    },
+    {
+      "name": "port8",
+      "label": "8",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": null,
+      "row": 1,
+      "column": 4.3
+    },
+    {
+      "name": "port9",
+      "label": "9",
+      "media": "RJ45",
+      "maxSpeedMbps": 5000,
+      "switchCapable": null,
+      "row": 0,
+      "column": 5.6
+    },
+    {
+      "name": "port10",
+      "label": "10",
+      "media": "RJ45",
+      "maxSpeedMbps": 5000,
+      "switchCapable": null,
+      "row": 1,
+      "column": 5.6
+    },
+    {
+      "name": "port11",
+      "label": "11",
+      "media": "RJ45",
+      "maxSpeedMbps": 5000,
+      "switchCapable": null,
+      "row": 0,
+      "column": 6.6
+    },
+    {
+      "name": "port12",
+      "label": "12",
+      "media": "RJ45",
+      "maxSpeedMbps": 5000,
+      "switchCapable": null,
+      "row": 1,
+      "column": 6.6
+    },
+    {
+      "name": "port13",
+      "label": "13",
+      "media": "RJ45",
+      "maxSpeedMbps": 5000,
+      "switchCapable": null,
+      "row": 0,
+      "column": 7.6
+    },
+    {
+      "name": "port14",
+      "label": "14",
+      "media": "RJ45",
+      "maxSpeedMbps": 5000,
+      "switchCapable": null,
+      "row": 1,
+      "column": 7.6
+    },
+    {
+      "name": "port15",
+      "label": "15",
+      "media": "RJ45",
+      "maxSpeedMbps": 5000,
+      "switchCapable": null,
+      "row": 0,
+      "column": 8.6
+    },
+    {
+      "name": "port16",
+      "label": "16",
+      "media": "RJ45",
+      "maxSpeedMbps": 5000,
+      "switchCapable": null,
+      "row": 1,
+      "column": 8.6
+    },
+    {
+      "name": "x1",
+      "label": "X1",
+      "media": "SFPPlus",
+      "maxSpeedMbps": 10000,
+      "switchCapable": null,
+      "row": 0,
+      "column": 9.9
+    },
+    {
+      "name": "x2",
+      "label": "X2",
+      "media": "SFPPlus",
+      "maxSpeedMbps": 10000,
+      "switchCapable": null,
+      "row": 1,
+      "column": 9.9
+    },
+    {
+      "name": "x3",
+      "label": "X3",
+      "media": "SFPPlus",
+      "maxSpeedMbps": 10000,
+      "switchCapable": null,
+      "row": 0,
+      "column": 10.9
+    },
+    {
+      "name": "x4",
+      "label": "X4",
+      "media": "SFPPlus",
+      "maxSpeedMbps": 10000,
+      "switchCapable": null,
+      "row": 1,
+      "column": 10.9
+    },
+    {
+      "name": "x5",
+      "label": "X5",
+      "media": "SFPPlus",
+      "maxSpeedMbps": 10000,
+      "switchCapable": null,
+      "row": 0,
+      "column": 11.9
+    },
+    {
+      "name": "x6",
+      "label": "X6",
+      "media": "SFPPlus",
+      "maxSpeedMbps": 10000,
+      "switchCapable": null,
+      "row": 1,
+      "column": 11.9
+    },
+    {
+      "name": "x7",
+      "label": "X7",
+      "media": "SFPPlus",
+      "maxSpeedMbps": 10000,
+      "switchCapable": null,
+      "row": 0,
+      "column": 12.9
+    },
+    {
+      "name": "x8",
+      "label": "X8",
+      "media": "SFPPlus",
+      "maxSpeedMbps": 10000,
+      "switchCapable": null,
+      "row": 1,
+      "column": 12.9
+    },
+    {
+      "name": "port17",
+      "label": "17",
+      "media": "SFP",
+      "maxSpeedMbps": 1000,
+      "switchCapable": null,
+      "row": 0,
+      "column": 14.2
+    },
+    {
+      "name": "port18",
+      "label": "18",
+      "media": "SFP",
+      "maxSpeedMbps": 1000,
+      "switchCapable": null,
+      "row": 0,
+      "column": 15.2
+    },
+    {
+      "name": "port19",
+      "label": "19",
+      "media": "SFP",
+      "maxSpeedMbps": 1000,
+      "switchCapable": null,
+      "row": 1,
+      "column": 14.2
+    },
+    {
+      "name": "port20",
+      "label": "20",
+      "media": "SFP",
+      "maxSpeedMbps": 1000,
+      "switchCapable": null,
+      "row": 1,
+      "column": 15.2
+    }
+  ],
+  "virtualPorts": []
+}

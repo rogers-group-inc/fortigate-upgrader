@@ -1,0 +1,104 @@
+{
+  "model": "61F",
+  "displayName": "FortiGate 61F",
+  "platform": "FORTIGATE-61F",
+  "configPrefix": "FGT61F",
+  "verified": true,
+  "notes": "Verified against a production 61F configuration.",
+  "image": "images/61f.png",
+  "ports": [
+    {
+      "name": "wan2",
+      "label": "WAN2",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": false,
+      "row": 0,
+      "column": 0
+    },
+    {
+      "name": "wan1",
+      "label": "WAN1",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": false,
+      "row": 0,
+      "column": 1
+    },
+    {
+      "name": "dmz",
+      "label": "DMZ",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": null,
+      "row": 0,
+      "column": 2
+    },
+    {
+      "name": "b",
+      "label": "B",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": null,
+      "row": 0,
+      "column": 3
+    },
+    {
+      "name": "a",
+      "label": "A",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": null,
+      "row": 0,
+      "column": 4
+    },
+    {
+      "name": "internal5",
+      "label": "5",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": true,
+      "row": 0,
+      "column": 5.4
+    },
+    {
+      "name": "internal4",
+      "label": "4",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": true,
+      "row": 0,
+      "column": 6.4
+    },
+    {
+      "name": "internal3",
+      "label": "3",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": true,
+      "row": 0,
+      "column": 7.4
+    },
+    {
+      "name": "internal2",
+      "label": "2",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": true,
+      "row": 0,
+      "column": 8.4
+    },
+    {
+      "name": "internal1",
+      "label": "1",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": true,
+      "row": 0,
+      "column": 9.4
+    }
+  ],
+  "virtualPorts": [
+    "modem"
+  ]
+}

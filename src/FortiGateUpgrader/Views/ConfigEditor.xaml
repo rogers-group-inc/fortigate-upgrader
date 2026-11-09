@@ -1,0 +1,32 @@
+<UserControl x:Class="FortiGateUpgrader.Views.ConfigEditor"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ae="http://icsharpcode.net/sharpdevelop/avalonedit">
+    <UserControl.Resources>
+        <Style TargetType="Button">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Padding" Value="4,1" />
+        </Style>
+    </UserControl.Resources>
+    <DockPanel>
+        <Border DockPanel.Dock="Bottom" Background="#F9FAFB" BorderBrush="#E5E7EB" BorderThickness="0,1,0,0" Padding="8,4">
+            <DockPanel>
+                <TextBlock x:Name="Position" DockPanel.Dock="Right" Foreground="#6B7280" VerticalAlignment="Center" Margin="8,0,0,0" />
+                <WrapPanel Orientation="Horizontal">
+                    <TextBlock Text="Find:" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <TextBox x:Name="FindBox" Width="170" VerticalContentAlignment="Center" KeyDown="FindBox_KeyDown" TextChanged="FindBox_TextChanged"
+                             ToolTip="Matches are highlighted as you type. Enter = next, Shift+Enter = previous (Ctrl+F to focus, Esc to clear)" />
+                    <Button Content="▲" Width="26" Margin="4,0,0,0" Click="FindPrev_Click" ToolTip="Previous match (Shift+F3)" />
+                    <Button Content="▼" Width="26" Margin="2,0,0,0" Click="FindNext_Click" ToolTip="Next match (F3)" />
+                    <TextBlock x:Name="FindStatus" Foreground="#6B7280" VerticalAlignment="Center" Margin="8,0,14,0" MinWidth="70" />
+                    <TextBlock Text="Line:" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <TextBox x:Name="LineBox" Width="60" VerticalContentAlignment="Center" KeyDown="LineBox_KeyDown"
+                             ToolTip="Type a line number and press Enter (Ctrl+G to focus)" />
+                </WrapPanel>
+            </DockPanel>
+        </Border>
+        <ae:TextEditor x:Name="Editor" FontFamily="Cascadia Mono, Consolas, Courier New" FontSize="12.5"
+                       ShowLineNumbers="True" WordWrap="False" LineNumbersForeground="#9CA3AF"
+                       HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Padding="4,2" />
+    </DockPanel>
+</UserControl>

@@ -1,0 +1,104 @@
+{
+  "model": "91G",
+  "displayName": "FortiGate 91G",
+  "platform": "FORTIGATE-91G",
+  "configPrefix": "FGT91G",
+  "verified": true,
+  "notes": "Verified against a production 91G configuration. WAN1/WAN2 RJ45 jacks share x1/x2 with the SFP+ cages.",
+  "image": "images/91g.png",
+  "ports": [
+    {
+      "name": "x1",
+      "label": "WAN1 / SFP+1",
+      "media": "SharedRJ45SFPPlus",
+      "maxSpeedMbps": 10000,
+      "switchCapable": false,
+      "row": 0,
+      "column": 0
+    },
+    {
+      "name": "x2",
+      "label": "WAN2 / SFP+2",
+      "media": "SharedRJ45SFPPlus",
+      "maxSpeedMbps": 10000,
+      "switchCapable": false,
+      "row": 1,
+      "column": 0
+    },
+    {
+      "name": "port1",
+      "label": "1",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": true,
+      "row": 0,
+      "column": 1.4
+    },
+    {
+      "name": "port2",
+      "label": "2",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": true,
+      "row": 1,
+      "column": 1.4
+    },
+    {
+      "name": "port3",
+      "label": "3",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": true,
+      "row": 0,
+      "column": 2.4
+    },
+    {
+      "name": "port4",
+      "label": "4",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": true,
+      "row": 1,
+      "column": 2.4
+    },
+    {
+      "name": "port5",
+      "label": "5",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": true,
+      "row": 0,
+      "column": 3.4
+    },
+    {
+      "name": "port6",
+      "label": "6",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": true,
+      "row": 1,
+      "column": 3.4
+    },
+    {
+      "name": "a",
+      "label": "A",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": null,
+      "row": 0,
+      "column": 4.4
+    },
+    {
+      "name": "b",
+      "label": "B",
+      "media": "RJ45",
+      "maxSpeedMbps": 1000,
+      "switchCapable": null,
+      "row": 1,
+      "column": 4.4
+    }
+  ],
+  "virtualPorts": [
+    "modem"
+  ]
+}
