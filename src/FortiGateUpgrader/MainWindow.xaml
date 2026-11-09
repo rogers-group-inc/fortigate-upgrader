@@ -19,42 +19,17 @@
     </Window.Resources>
 
     <DockPanel>
-        <!-- Step 1: load + choose target -->
-        <Border DockPanel.Dock="Top" Background="#F3F4F6" BorderBrush="#E5E7EB" BorderThickness="0,0,0,1" Padding="12,10">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="1" Style="{StaticResource SectionHeader}" Margin="0,0,6,0" Foreground="#2563EB" FontSize="16" VerticalAlignment="Center" />
-                    <Button x:Name="OpenButton" Content="Open config…" Click="OpenButton_Click" />
-                </StackPanel>
-                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0">
-                    <TextBlock x:Name="SourceSummary" Text="No configuration loaded." TextTrimming="CharacterEllipsis" />
-                    <TextBlock x:Name="SourceFile" Foreground="#6B7280" FontSize="11" TextTrimming="CharacterEllipsis" />
-                </StackPanel>
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="2" Foreground="#2563EB" FontSize="16" FontWeight="SemiBold" Margin="0,0,6,0" VerticalAlignment="Center" />
-                    <TextBlock Text="New model:" VerticalAlignment="Center" Margin="0,0,6,0" />
-                    <ComboBox x:Name="TargetCombo" Width="170" IsEnabled="False" SelectionChanged="TargetCombo_SelectionChanged" />
-                </StackPanel>
-            </Grid>
+        <!-- Progress -->
+        <Border DockPanel.Dock="Top" Background="#F9FAFB" BorderBrush="#E5E7EB" BorderThickness="0,0,0,1" Padding="12,12">
+            <views:StepIndicator x:Name="Stepper" />
         </Border>
 
-        <!-- Step 4: export -->
+        <!-- Navigation -->
         <Border DockPanel.Dock="Bottom" Background="#F3F4F6" BorderBrush="#E5E7EB" BorderThickness="0,1,0,0" Padding="12,10">
             <DockPanel>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button x:Name="ExportButton" Content="Export converted config…" IsEnabled="False" Click="ExportButton_Click" FontWeight="SemiBold" Margin="0" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="4" Foreground="#2563EB" FontSize="16" FontWeight="SemiBold" Margin="0,0,6,0" VerticalAlignment="Center" />
-                    <TextBlock Text="New hostname (optional):" VerticalAlignment="Center" Margin="0,0,6,0" />
-                    <TextBox x:Name="HostnameBox" Width="240" VerticalContentAlignment="Center" Padding="3" TextChanged="HostnameBox_TextChanged" />
-                    <TextBlock x:Name="ExportStatus" Margin="14,0,0,0" VerticalAlignment="Center" Foreground="#6B7280" />
-                </StackPanel>
+                <Button x:Name="BackButton" DockPanel.Dock="Left" Content="◀  Back" Click="Back_Click" IsEnabled="False" />
+                <Button x:Name="NextButton" DockPanel.Dock="Right" Content="Next  ▶" Click="Next_Click" IsEnabled="False" FontWeight="SemiBold" Margin="0" MinWidth="110" />
+                <TextBlock x:Name="ExportStatus" VerticalAlignment="Center" Foreground="#6B7280" TextWrapping="Wrap" Margin="10,0" TextAlignment="Right" />
             </DockPanel>
         </Border>
 
@@ -71,16 +46,26 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <TextBlock Text="Port details" Style="{StaticResource SectionHeader}" />
-                    <TextBlock x:Name="PortDetails" TextWrapping="Wrap" Foreground="#374151"
-                               Text="Click a port to see how it is used. Hover for a quick summary." />
+                    <StackPanel x:Name="PortDetailsSection">
+                        <TextBlock Text="Port details" Style="{StaticResource SectionHeader}" />
+                        <TextBlock x:Name="PortDetails" TextWrapping="Wrap" Foreground="#374151"
+                                   Text="Click a port to see how it is used. Hover for a quick summary." />
+                    </StackPanel>
 
                     <TextBlock Text="How to use" Style="{StaticResource SectionHeader}" />
-                    <TextBlock TextWrapping="Wrap" Foreground="#374151">
-                        • Drag from a port on the current firewall to a port on the new one.<LineBreak />
+                    <TextBlock x:Name="HowToMap" TextWrapping="Wrap" Foreground="#374151">
+                        • Drag from a port on the current firewall to a port on the new one. Nothing is connected until you do (or click Auto-map).<LineBreak />
                         • Drag a connected port to move its line; drop on empty space to remove it.<LineBreak />
                         • Click a line and press Delete to remove it. Esc cancels a drag.<LineBreak />
-                        • Ports you leave unmapped are not converted.
+                        • Ports you leave unmapped are not converted.<LineBreak />
+                        • Purple ports are only switch/aggregate members – choose their new ports in step 4 (Aggregates &amp; switches) instead.
+                    </TextBlock>
+                    <TextBlock x:Name="HowToGroups" TextWrapping="Wrap" Foreground="#374151" Visibility="Collapsed">
+                        • Drag ports of the new firewall onto the switch or aggregate they should belong to (e.g. port1–5 onto "internal").<LineBreak />
+                        • Drag a connected port to move it to another group; drop on empty space to take it out.<LineBreak />
+                        • Click a line and press Delete to remove it. Esc cancels a drag.<LineBreak />
+                        • A group with no ports is not converted.<LineBreak />
+                        • Blue dot: the port gets an old port's settings (step 3). It can only join the group that old port was in.
                     </TextBlock>
 
                     <TextBlock Text="Legend" Style="{StaticResource SectionHeader}" />
@@ -88,6 +73,7 @@
                         <StackPanel Orientation="Horizontal" Margin="0,2"><Rectangle Width="26" Height="4" Fill="#16A34A" Margin="0,0,8,0" VerticalAlignment="Center" /><TextBlock Text="One port to one port (OK)" /></StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,2"><Rectangle Width="26" Height="4" Fill="#DC2626" Margin="0,0,8,0" VerticalAlignment="Center" /><TextBlock Text="Conflict – two ports on one port" /></StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,2"><Border Width="26" Height="16" BorderBrush="#F59E0B" BorderThickness="3" Background="#374151" Margin="0,0,8,0" /><TextBlock Text="In use, not mapped (won't be converted)" /></StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2"><Border Width="26" Height="16" BorderBrush="#7C3AED" BorderThickness="2.5" Background="#374151" Margin="0,0,8,0" /><TextBlock Text="Only a switch/aggregate member" /></StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,2"><Ellipse Width="9" Height="9" Fill="#2563EB" Margin="8,0,17,0" VerticalAlignment="Center" /><TextBlock Text="Port carries configuration" /></StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,2"><Border Width="26" Height="16" Background="#374151" Margin="0,0,8,0" /><TextBlock Text="RJ45" /></StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,2"><Border Width="26" Height="16" Background="#475569" Margin="0,0,8,0" /><TextBlock Text="RJ45 / SFP shared" /></StackPanel>
@@ -104,7 +90,71 @@
         </Border>
 
         <!-- Step 3: mapping, configs and differences -->
-        <TabControl x:Name="Tabs" Margin="8,8,0,0" SelectionChanged="Tabs_SelectionChanged" BorderThickness="0,1,0,0">
+        <TabControl x:Name="Tabs" Margin="8,4,0,0" SelectionChanged="Tabs_SelectionChanged" BorderThickness="0">
+            <TabControl.Template>
+                <ControlTemplate TargetType="TabControl">
+                    <!-- Hidden tab strip; PART_SelectedContentHost keeps the content visible to UI Automation / screen readers. -->
+                    <Grid>
+                        <TabPanel IsItemsHost="True" Visibility="Collapsed" />
+                        <ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent" />
+                    </Grid>
+                </ControlTemplate>
+            </TabControl.Template>
+
+            <TabItem x:Name="OpenStep" Header="Open config">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="24,18" MaxWidth="900" HorizontalAlignment="Left">
+                        <TextBlock Text="Open the configuration of the current firewall" FontSize="20" FontWeight="SemiBold" />
+                        <TextBlock Foreground="#4B5563" TextWrapping="Wrap" Margin="0,6,0,14"
+                                   Text="Pick a .conf backup or a FortiManager config preview (.txt), or drag the file onto this window. It is checked automatically; Next lights up when it can be converted." />
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="OpenButton" Content="Open config…" Click="OpenButton_Click" FontWeight="SemiBold" Padding="18,7" />
+                            <StackPanel VerticalAlignment="Center" Margin="6,0">
+                                <TextBlock x:Name="SourceSummary" Text="No configuration loaded." TextTrimming="CharacterEllipsis" />
+                                <TextBlock x:Name="SourceFile" Foreground="#6B7280" FontSize="11" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </StackPanel>
+                        <TextBlock Text="Checks" Style="{StaticResource SectionHeader}" Margin="0,22,0,6" />
+                        <ItemsControl x:Name="CheckList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Text}" Foreground="{Binding Brush}" TextWrapping="Wrap" Margin="0,3" FontSize="13.5" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem x:Name="ModelStep" Header="Model &amp; hostname">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="24,18" MaxWidth="900" HorizontalAlignment="Left">
+                        <TextBlock Text="Choose the new firewall" FontSize="20" FontWeight="SemiBold" />
+                        <TextBlock x:Name="ModelStepSource" Foreground="#4B5563" TextWrapping="Wrap" Margin="0,6,0,18" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="New model" VerticalAlignment="Center" FontWeight="SemiBold" />
+                            <ComboBox x:Name="TargetCombo" Grid.Column="1" Width="240" HorizontalAlignment="Left" IsEnabled="False" SelectionChanged="TargetCombo_SelectionChanged" Padding="6,4" />
+                            <TextBlock x:Name="TargetNote" Grid.Row="1" Grid.Column="1" Foreground="#B45309" TextWrapping="Wrap" MaxWidth="560" Margin="0,4,0,0" />
+                            <TextBlock Text="New hostname" Grid.Row="2" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,16,0,0" />
+                            <TextBox x:Name="HostnameBox" Grid.Row="2" Grid.Column="1" Width="240" HorizontalAlignment="Left" Padding="4" Margin="0,16,0,0"
+                                     VerticalContentAlignment="Center" TextChanged="HostnameBox_TextChanged" />
+                            <TextBlock x:Name="HostnameNote" Grid.Row="3" Grid.Column="1" Foreground="#6B7280" TextWrapping="Wrap" MaxWidth="560" Margin="0,4,0,0"
+                                       Text="Up to 35 characters, no spaces or quotes. It is also the default IPsec local ID." />
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <TabItem x:Name="MapTab" Header="Port mapping">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -112,7 +162,6 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
                     <StackPanel Orientation="Horizontal" Margin="4,10,12,0">
-                        <TextBlock Text="3" Foreground="#2563EB" FontSize="16" FontWeight="SemiBold" Margin="0,0,6,0" VerticalAlignment="Center" />
                         <TextBlock Text="Map the ports" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,14,0" />
                         <Button x:Name="AutoMapButton" Content="Auto-map" IsEnabled="False" Click="AutoMapButton_Click"
                                 ToolTip="Connect ports with the same front-panel label or name" />
@@ -124,18 +173,35 @@
                 </Grid>
             </TabItem>
 
+            <TabItem x:Name="GroupsTab" Header="Aggregates &amp; switches">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Orientation="Horizontal" Margin="4,10,12,0">
+                        <TextBlock Text="Ports for switch and aggregate interfaces" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,14,0" />
+                        <Button x:Name="GroupsFromMapButton" Content="Use port mapping" IsEnabled="False" Click="GroupsFromMap_Click"
+                                ToolTip="Put each new port into the group its old port was in (based on step 3, Port mapping)" />
+                        <Button x:Name="GroupsClearButton" Content="Clear all" IsEnabled="False" Click="GroupsClear_Click" />
+                    </StackPanel>
+                    <Viewbox Grid.Row="1" Stretch="Uniform" StretchDirection="DownOnly" Margin="12">
+                        <views:GroupMapView x:Name="GroupView" />
+                    </Viewbox>
+                </Grid>
+            </TabItem>
+
             <TabItem x:Name="IpsecTab" Header="IPsec keys">
                 <DockPanel Margin="12,10,12,8">
                     <StackPanel DockPanel.Dock="Top">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="3b" Foreground="#2563EB" FontSize="16" FontWeight="SemiBold" Margin="0,0,6,0" VerticalAlignment="Center" />
                             <TextBlock Text="New IPsec local IDs and pre-shared keys" FontWeight="SemiBold" VerticalAlignment="Center" />
                         </StackPanel>
                         <TextBlock x:Name="IpsecIntro" TextWrapping="Wrap" Margin="0,6,0,8" Foreground="#374151" />
                         <Border x:Name="IpsecWarning" Background="#FEF3C7" BorderBrush="#F59E0B" BorderThickness="1" Padding="10,6" Margin="0,0,0,10" CornerRadius="3">
                             <TextBlock TextWrapping="Wrap">
                                 <Run FontWeight="SemiBold">Keys are shown and saved in clear text.</Run>
-                                They are written into the exported .conf file (not the report) and are visible in the Compare &amp; edit tab.
+                                They are written into the exported .conf file (not the report) and are visible in step 6 (Compare &amp; edit).
                                 Keep the exported file private, don't email it or save it to shared folders, and delete it once the new firewall is set up.
                                 The keys are not stored anywhere else and are forgotten when the app closes.
                             </TextBlock>
@@ -158,7 +224,7 @@
                                                 <TextBlock Text="{Binding Status}" Foreground="{Binding StatusBrush}" TextWrapping="Wrap" Margin="0,4,0,0" />
                                             </StackPanel>
                                             <StackPanel Grid.Column="1" Margin="0,0,12,0" Width="230">
-                                                <TextBlock Text="New local ID" Foreground="#374151" Margin="0,0,0,2" />
+                                                <TextBlock Text="New local ID (defaults to the new hostname)" Foreground="#374151" Margin="0,0,0,2" />
                                                 <TextBox Text="{Binding LocalId, UpdateSourceTrigger=PropertyChanged}" Padding="3" FontFamily="Cascadia Mono, Consolas" />
                                                 <TextBlock Text="{Binding CurrentLocalId}" Foreground="#6B7280" FontSize="11" Margin="0,2,0,0" />
                                             </StackPanel>
@@ -280,6 +346,33 @@
                         </DockPanel>
                     </Grid>
                 </DockPanel>
+            </TabItem>
+            <TabItem x:Name="SummaryStep" Header="Summary">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="24,18" MaxWidth="1000" HorizontalAlignment="Left">
+                        <TextBlock Text="Summary" FontSize="20" FontWeight="SemiBold" />
+                        <TextBlock Foreground="#4B5563" TextWrapping="Wrap" Margin="0,6,0,14"
+                                   Text="Check what will be exported. Export saves the converted .conf and an HTML report of every change." />
+                        <ItemsControl x:Name="SummaryList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Text}" Foreground="{Binding Brush}" TextWrapping="Wrap" Margin="0,3" FontSize="13.5" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Border Background="#FEF3C7" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="3" Padding="10,8" Margin="0,16,0,0">
+                            <TextBlock TextWrapping="Wrap">
+                                <Run FontWeight="SemiBold">Human review required.</Run>
+                                A network engineer must review the report and the converted config, and test it on a lab unit, before it is used in production.
+                            </TextBlock>
+                        </Border>
+                        <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                            <Button x:Name="ExportButton" Content="Export converted config…" IsEnabled="False" Click="ExportButton_Click"
+                                    FontWeight="SemiBold" Padding="20,8" Background="#2563EB" Foreground="White" />
+                            <TextBlock x:Name="ExportResult" VerticalAlignment="Center" Foreground="#15803D" TextWrapping="Wrap" MaxWidth="600" />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
         </TabControl>
     </DockPanel>

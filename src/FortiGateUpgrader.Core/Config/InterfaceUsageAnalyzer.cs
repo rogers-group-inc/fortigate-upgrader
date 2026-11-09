@@ -19,6 +19,15 @@ public sealed class PortUsage
     public bool InUse => Reasons.Count > 0;
 
     public string Summary => InUse ? string.Join("\n", Reasons) : "Not used (default settings only)";
+
+    /// <summary>
+    /// True when the port's only job is being a member of a switch/aggregate (no address, nothing else
+    /// refers to it). Such ports don't need mapping: the group's new members are chosen separately.
+    /// </summary>
+    public bool OnlyGroupMember { get; internal set; }
+
+    /// <summary>Names of the switch/aggregate interfaces this port is a member of.</summary>
+    public List<string> Groups { get; } = new();
 }
 
 /// <summary>Determines which physical/virtual ports of the source model carry configuration.</summary>
@@ -41,12 +50,22 @@ public static class InterfaceUsageAnalyzer
             u.Reasons.Add(Explain(r));
         }
 
+        var hasOwn = new HashSet<string>();
         foreach (var name in names)
         {
             var def = InterfaceReferences.FindDefinition(config, name);
             if (def == null) continue;
             var own = OwnSettings(def);
-            if (own != null) result[name].Reasons.Insert(0, own);
+            if (own == null) continue;
+            result[name].Reasons.Insert(0, own);
+            hasOwn.Add(name);
+        }
+
+        foreach (var u in result.Values)
+        {
+            var refs = u.References.Where(r => !r.IsDefinition).ToList();
+            foreach (var r in refs.Where(IsMembership)) u.Groups.Add(GroupOf(r));
+            u.OnlyGroupMember = refs.Count > 0 && refs.All(IsMembership) && !hasOwn.Contains(u.Name);
         }
 
         foreach (var u in result.Values)
@@ -79,6 +98,14 @@ public static class InterfaceUsageAnalyzer
         return null;
     }
 
+    /// <summary>True for a reference that makes the port a member of a switch/aggregate.</summary>
+    public static bool IsMembership(InterfaceReference r) =>
+        r.Node.ConfigPath == "system virtual-switch/port" ||
+        r.Node.SetKey == "member" && r.Node.ConfigPath is "system interface" or "system switch-interface";
+
+    private static string GroupOf(InterfaceReference r) =>
+        r.Node.ConfigPath == "system virtual-switch/port" ? r.Node.Parent?.Parent?.Name ?? "" : r.Node.Parent?.Name ?? "";
+
     private static string Explain(InterfaceReference r)
     {
         var path = r.Node.ConfigPath;
@@ -87,6 +114,7 @@ public static class InterfaceUsageAnalyzer
         {
             "system virtual-switch/port" => $"Member of hardware switch \"{r.Node.Parent?.Parent?.Name}\"",
             "system interface" when key == "member" => $"Member of aggregate/redundant \"{r.Node.Parent?.Name}\"",
+            "system switch-interface" when key == "member" => $"Member of software switch \"{r.Node.Parent?.Name}\"",
             "system interface" when key == "interface" && r.Node.Parent?.FindSet("type")?.Values.FirstOrDefault()?.Text == "tunnel"
                 => $"Underlay of tunnel \"{r.Node.Parent?.Name}\"",
             "system interface" when key == "interface" => $"Parent of VLAN/sub-interface \"{r.Node.Parent?.Name}\"",

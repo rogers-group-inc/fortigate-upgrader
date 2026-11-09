@@ -77,7 +77,7 @@ public sealed class PortMapView : Canvas
     private static SolidColorBrush B(string hex) => (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
     private static readonly Brush Green = B("#16A34A"), Red = B("#DC2626"), Amber = B("#F59E0B"), Idle = B("#9CA3AF"),
         Drag = B("#2563EB"), PanelFill = B("#F3F4F6"), PanelStroke = B("#9CA3AF"), RJ45Fill = B("#374151"),
-        OpticalFill = B("#64748B"), SharedFill = B("#475569"), Muted = B("#6B7280"), Selected = B("#2563EB");
+        OpticalFill = B("#64748B"), SharedFill = B("#475569"), Muted = B("#6B7280"), Selected = B("#2563EB"), Purple = B("#7C3AED");
 
     // ---------------------------------------------------------------- layout
 
@@ -167,6 +167,7 @@ public sealed class PortMapView : Canvas
                 case SourcePortStatus.Conflict: stroke = Red; thickness = 2.5; break;
                 case SourcePortStatus.UnmappedInUse: stroke = Amber; thickness = 3.5; break;
                 case SourcePortStatus.UnmappedUnused: opacity = 0.75; break;
+                case SourcePortStatus.GroupMember: stroke = Purple; thickness = 2.5; break;
             }
         }
         else
@@ -231,6 +232,7 @@ public sealed class PortMapView : Canvas
             {
                 SourcePortStatus.UnmappedInUse => "Not mapped – it won't be converted, and its settings and anything that depends on it will be removed. Drag it to a port to keep them.",
                 SourcePortStatus.UnmappedUnused => "Not mapped – unused, won't be converted.",
+                SourcePortStatus.GroupMember => $"Only a member of {string.Join(", ", u.Groups)}. You don't need to map it: choose that group's new ports in step 4 (Aggregates & switches). Map it only to carry its port settings (speed etc.).",
                 _ => "Drag to change where it goes.",
             });
         }

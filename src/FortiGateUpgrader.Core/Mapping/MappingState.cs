@@ -21,6 +21,8 @@ public enum SourcePortStatus
     UnmappedUnused,
     /// <summary>Not mapped but carries configuration (amber). It is not converted and its settings are removed.</summary>
     UnmappedInUse,
+    /// <summary>Not mapped, and its only role is being a switch/aggregate member: the group's new ports are chosen on the groups tab.</summary>
+    GroupMember,
 }
 
 /// <summary>The user's port-to-port links plus the validation rules (green / red / amber).</summary>
@@ -85,7 +87,8 @@ public sealed class MappingState
     {
         var links = _links.Where(l => l.Source == source).ToList();
         if (links.Count > 0) return links.Any(l => StatusOf(l) == LinkStatus.Conflict) ? SourcePortStatus.Conflict : SourcePortStatus.Mapped;
-        return Usage.TryGetValue(source, out var u) && u.InUse ? SourcePortStatus.UnmappedInUse : SourcePortStatus.UnmappedUnused;
+        if (!Usage.TryGetValue(source, out var u) || !u.InUse) return SourcePortStatus.UnmappedUnused;
+        return u.OnlyGroupMember ? SourcePortStatus.GroupMember : SourcePortStatus.UnmappedInUse;
     }
 
     public bool IsTargetConflicted(string target) => _links.Count(l => l.Target == target) > 1;
@@ -117,6 +120,14 @@ public sealed class MappingState
         }).ToList();
 
     public bool IsComplete => Problems.Count == 0;
+
+    /// <summary>Like <see cref="ToMapping"/>, but tolerates conflicts (first link wins).</summary>
+    public IReadOnlyDictionary<string, string> ToMappingLenient()
+    {
+        var d = new Dictionary<string, string>();
+        foreach (var l in _links) d.TryAdd(l.Source, l.Target);
+        return d;
+    }
 
     public IReadOnlyDictionary<string, string> ToMapping() => _links.ToDictionary(l => l.Source, l => l.Target);
 

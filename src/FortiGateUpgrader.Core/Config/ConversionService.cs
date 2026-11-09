@@ -24,6 +24,12 @@ public sealed class ConversionRequest
     public bool RequireIpsecCredentials { get; init; } = true;
 
     public string? NewHostname { get; init; }
+
+    /// <summary>
+    /// Switch/aggregate interface name → its new member ports (target port names). A group with an
+    /// empty list (and no other members) is not converted. When null, members follow the port mapping.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>>? GroupMembers { get; init; }
 }
 
 public sealed class ConversionResult
@@ -34,7 +40,11 @@ public sealed class ConversionResult
     public List<IgnoredMatch> Ignored { get; } = new();
     /// <summary>Source ports (and virtual ports) that were not converted.</summary>
     public List<string> RemovedInterfaces { get; } = new();
-    /// <summary>Everything removed along with them, per removed port.</summary>
+    /// <summary>Switch/aggregate interfaces left without ports, so not converted.</summary>
+    public List<string> RemovedGroups { get; } = new();
+    /// <summary>Final members of each converted switch/aggregate interface.</summary>
+    public Dictionary<string, IReadOnlyList<string>> GroupMembers { get; } = new();
+    /// <summary>Everything removed along with them, per removed port or group.</summary>
     public Dictionary<string, List<string>> RemovedDependants { get; } = new();
     /// <summary>IPsec tunnels in the output that need a pre-shared key.</summary>
     public List<IpsecTunnel> Tunnels { get; } = new();
@@ -73,6 +83,12 @@ public static class ConversionService
         var output = FortiConfigParser.Parse(FortiConfigWriter.Write(req.Source));
         var result = new ConversionResult { Output = output };
 
+        // ---- Switch/aggregate interfaces: take the old physical members out now; the new members
+        //      (chosen on the groups tab) are added after renaming.
+        var groups = InterfaceGroups.Find(output, src);
+        var groupMembers = ResolveGroupMembers(req, groups);
+        InterfaceGroups.StripPhysicalMembers(output, groups);
+
         // ---- Build the full rename map (physical + virtual ports). Anything unmapped is not converted.
         var mapping = new Dictionary<string, string>(req.Mapping);
         var remove = new List<string>();
@@ -97,6 +113,15 @@ public static class ConversionService
             result.RemovedDependants[name] = gone.Where(g => g != $"system interface → edit \"{name}\"").ToList();
         }
 
+        // ---- Groups left without any member are not converted either.
+        foreach (var g in groups.Where(g => groupMembers[g.Name].Count == 0 && g.OtherMembers.Count == 0))
+        {
+            InterfaceGroups.RemoveOwnerEntry(output, g);
+            var gone = InterfaceRemover.Remove(output, new[] { g.Name });
+            result.RemovedGroups.Add(g.Name);
+            result.RemovedDependants[g.Name] = gone.Where(x => x != $"system interface → edit \"{g.Name}\"").ToList();
+        }
+
         // ---- Name collisions: a logical interface (VLAN, tunnel, ...) already uses a target port name.
         var remainingDefs = output.FindConfigs("system interface").SelectMany(c => c.Children)
             .Where(e => e.Kind == NodeKind.Edit).Select(e => e.Name).ToHashSet();
@@ -115,6 +140,12 @@ public static class ConversionService
             var newName = renameMap[r.Name];
             result.Renames.Add(new RenameRecord(r.Location, r.Name, newName));
             r.Token.Replace(newName);
+        }
+
+        foreach (var g in groups.Where(g => !result.RemovedGroups.Contains(g.Name)))
+        {
+            InterfaceGroups.AddMembers(output, g, groupMembers[g.Name]);
+            result.GroupMembers[g.Name] = groupMembers[g.Name];
         }
 
         ApplyIpsec(req, output, result);
@@ -137,7 +168,44 @@ public static class ConversionService
         }
         foreach (var g in req.Mapping.GroupBy(kv => kv.Value).Where(g => g.Count() > 1))
             problems.Add($"{req.TargetModel.Model} port \"{g.Key}\" has more than one source port: {string.Join(", ", g.Select(x => x.Key))}.");
+        if (req.GroupMembers != null)
+        {
+            var groups = InterfaceGroups.Find(req.Source, req.SourceModel);
+            foreach (var (name, ports) in req.GroupMembers)
+            {
+                var g = groups.FirstOrDefault(x => x.Name == name);
+                if (g == null) { problems.Add($"\"{name}\" is not a switch or aggregate interface in this configuration."); continue; }
+                foreach (var p in ports)
+                {
+                    var tp = req.TargetModel.FindPort(p);
+                    if (tp == null) { problems.Add($"\"{p}\" (member of {name}) is not a {req.TargetModel.Model} port."); continue; }
+                    if (g.Kind == GroupKind.HardwareSwitch && tp.SwitchCapable == false)
+                        problems.Add($"{p} can't be a hardware switch member on the {req.TargetModel.Model} (hardware switch \"{name}\").");
+                    foreach (var (s, t) in req.Mapping.Where(kv => kv.Value == p))
+                    {
+                        if (usage.TryGetValue(s, out var u) && u.InUse && !u.OnlyGroupMember && !g.PhysicalMembers.Contains(s))
+                            problems.Add($"{p} receives {s}'s settings and can't also be a member of \"{name}\".");
+                    }
+                }
+            }
+            foreach (var dup in req.GroupMembers.SelectMany(kv => kv.Value.Select(p => (Port: p, Group: kv.Key))).GroupBy(x => x.Port).Where(x => x.Count() > 1))
+                problems.Add($"{dup.Key} is in more than one group: {string.Join(", ", dup.Select(x => x.Group))}.");
+        }
         return problems;
+    }
+
+    /// <summary>New members per group: as given, or (when not given) the targets of the old members in the port mapping.</summary>
+    private static Dictionary<string, IReadOnlyList<string>> ResolveGroupMembers(ConversionRequest req, List<InterfaceGroup> groups)
+    {
+        var result = new Dictionary<string, IReadOnlyList<string>>();
+        foreach (var g in groups)
+        {
+            if (req.GroupMembers != null)
+                result[g.Name] = req.GroupMembers.TryGetValue(g.Name, out var m) ? m.Distinct().ToList() : new List<string>();
+            else
+                result[g.Name] = g.PhysicalMembers.Where(req.Mapping.ContainsKey).Select(p => req.Mapping[p]).Distinct().ToList();
+        }
+        return result;
     }
 
     private static void Validate(ConversionRequest req, Dictionary<string, PortUsage> usage)
@@ -288,6 +356,14 @@ public static class ConversionService
 
         if (result.Renames.Any(r => r.Location.StartsWith("system ha", StringComparison.Ordinal)))
             msgs.Add(new(Severity.Info, "HA heartbeat/monitor interfaces were renamed. If this unit is in an HA cluster, both members must be replaced and use the same mapping."));
+
+        foreach (var name in result.RemovedGroups)
+        {
+            var deps = result.RemovedDependants[name];
+            msgs.Add(new(deps.Count == 0 ? Severity.Info : Severity.Warning,
+                $"\"{name}\" has no ports on the {dst.Model}, so it was not converted." + (deps.Count == 0 ? "" :
+                $" {deps.Count} item(s) that depended on it were removed too: " + string.Join("; ", deps.Take(8)) + (deps.Count > 8 ? $"; … and {deps.Count - 8} more (see the report)." : "."))));
+        }
 
         foreach (var name in result.RemovedInterfaces)
         {

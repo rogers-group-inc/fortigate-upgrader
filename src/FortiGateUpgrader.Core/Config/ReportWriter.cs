@@ -52,6 +52,15 @@ code{font-family:Consolas,monospace}.Error{color:var(--err);font-weight:600}.War
                 sb.Append("</table>");
             }
         }
+        if (result.GroupMembers.Count > 0)
+        {
+            sb.Append("<h3>Switch and aggregate interfaces</h3><table><tr><th>Interface</th><th>Ports on the new firewall</th></tr>");
+            foreach (var (g, ports) in result.GroupMembers)
+                sb.Append($"<tr><td><code>{E(g)}</code></td><td>{string.Join(", ", ports.Select(p => $"<code>{E(p)}</code>"))}</td></tr>");
+            sb.Append("</table>");
+        }
+        if (result.RemovedGroups.Count > 0)
+            sb.Append($"<p>Switch/aggregate interfaces with no ports, so not converted: {string.Join(", ", result.RemovedGroups.Select(x => $"<code>{E(x)}</code>"))}</p>");
         if (result.UpdatedTunnels.Count > 0)
             sb.Append($"<p>IPsec tunnels given a new local ID and pre-shared key: {string.Join(", ", result.UpdatedTunnels.Select(x => $"<code>{E(x)}</code>"))}. The keys are in the .conf file in clear text and are not shown in this report.</p>");
         if (result.AddedInterfaces.Count > 0)

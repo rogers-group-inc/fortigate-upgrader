@@ -46,6 +46,7 @@ public partial class MainWindow : Window
     private ModelProfile? _sourceModel;
     private Dictionary<string, PortUsage>? _usage;
     private MappingState? _state;
+    private GroupState? _groups;
 
     // IPsec: user input per tunnel (kept while the same file is open), and the tunnels the current mapping keeps.
     private readonly Dictionary<string, TunnelInput> _tunnelInputs = new();
@@ -94,16 +95,97 @@ public partial class MainWindow : Window
         };
         OriginalEditor.IsReadOnly = true;
         ConvertedEditor.IsReadOnly = true;
+        Stepper.SetSteps(StepTitles);
+        Stepper.StepClicked += (_, i) => GoToStep(i);
         MapView.Rebuild();
         RefreshTunnels();
         UpdateEditState();
+        CheckList.ItemsSource = new[] { new StatusLine("No file opened yet.", InfoBrush) };
+        GoToStep(0);
+    }
+
+    // ------------------------------------------------------------------ wizard navigation
+
+    private static readonly string[] StepTitles =
+        { "Open config", "Model & hostname", "Port mapping", "Aggregates & switches", "IPsec keys", "Compare & edit", "Summary" };
+
+    private TabItem[] Steps => new[] { OpenStep, ModelStep, MapTab, GroupsTab, IpsecTab, CompareTab, SummaryStep };
+
+    private int CurrentStep => Math.Max(0, Tabs.SelectedIndex);
+
+    /// <summary>Why the user can't move past <paramref name="step"/> yet, or null when it's done.</summary>
+    private string? Blocker(int step) => step switch
+    {
+        0 => _source == null ? "Open a configuration file to continue." : null,
+        1 => _state == null ? "Choose the new model to continue."
+            : HostnameBox.Text.Trim() is { Length: > 0 } h && !IsValidHostname(h) ? "Fix the hostname: at most 35 characters, no spaces or quotes." : null,
+        2 => _state == null || _state.Links.Count == 0 ? "Drag at least one port from the current firewall to the new one (or click Auto-map)."
+            : !_state.IsComplete ? "Fix the red lines to continue." : null,
+        3 => !GroupsComplete ? "Fix the red lines to continue." : null,
+        4 => !IpsecComplete ? $"Enter a local ID and pre-shared key for every tunnel to continue ({_currentTunnels.Count(t => t.Problem == null)} of {_currentTunnels.Count} done)." : null,
+        // Not generated yet (stale) is fine: the summary generates it. Only a failed conversion blocks.
+        5 => !ReadyToConvert && !ConvertedEdited ? "Complete the earlier steps first."
+            : !_conversionStale && _result == null && !ConvertedEdited ? _conversionError ?? "The converted config couldn't be generated." : null,
+        _ => null,
+    };
+
+    private bool Reachable(int step) => Enumerable.Range(0, step).All(i => Blocker(i) == null);
+
+    private void GoToStep(int step)
+    {
+        step = Math.Clamp(step, 0, Steps.Length - 1);
+        if (step > CurrentStep && !Reachable(step)) return;
+        Tabs.SelectedItem = Steps[step];
+        UpdateSidePanel();
+        UpdateNav();
+    }
+
+    /// <summary>The side panel describes the two wiring steps; the other steps get the full width.</summary>
+    private void UpdateSidePanel()
+    {
+        if (SidePanel == null) return;
+        var map = Tabs.SelectedItem == MapTab;
+        SidePanel.Visibility = map || Tabs.SelectedItem == GroupsTab ? Visibility.Visible : Visibility.Collapsed;
+        PortDetailsSection.Visibility = HowToMap.Visibility = map ? Visibility.Visible : Visibility.Collapsed;
+        HowToGroups.Visibility = map ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void Back_Click(object sender, RoutedEventArgs e) => GoToStep(CurrentStep - 1);
+
+    private void Next_Click(object sender, RoutedEventArgs e) => GoToStep(CurrentStep + 1);
+
+    private static readonly Brush NextBrush = Frozen(0x25, 0x63, 0xEB);
+
+    /// <summary>Updates the stepper and the Back/Next buttons for the current state.</summary>
+    private void UpdateNav()
+    {
+        if (Stepper == null || NextButton == null) return;
+        var current = CurrentStep;
+        var blockers = Enumerable.Range(0, Steps.Length).Select(Blocker).ToList();
+        var reachable = Enumerable.Range(0, Steps.Length).Select(i => blockers.Take(i).All(b => b == null)).ToList();
+        var done = Enumerable.Range(0, Steps.Length).Select(i => i < current && blockers[i] == null).ToList();
+        Stepper.Update(current, done, reachable);
+
+        BackButton.IsEnabled = current > 0;
+        var last = current == Steps.Length - 1;
+        NextButton.Visibility = last ? Visibility.Collapsed : Visibility.Visible;
+        var ok = !last && blockers[current] == null;
+        NextButton.IsEnabled = ok;
+        // Highlight Next once the step is complete.
+        NextButton.Background = ok ? NextBrush : null;
+        NextButton.Foreground = ok ? Brushes.White : null;
+        NextButton.Content = !last ? $"Next: {StepTitles[current + 1]}  ▶" : "Next  ▶";
+        if (NextButton.Background == null) NextButton.ClearValue(BackgroundProperty);
+        if (NextButton.Foreground == null) NextButton.ClearValue(ForegroundProperty);
+        ExportStatus.Text = last ? "" : blockers[current] ?? "";
     }
 
     private bool OriginalDirty => _originalText != null && OriginalEditor.Text != _originalText;
     private bool OriginalEdited => _originalText != null && _fileText != null && _originalText != _fileText;
     private bool ConvertedEdited => _generatedText != null && ConvertedEditor.Text != _generatedText;
     private bool IpsecComplete => _currentTunnels.All(t => t.Problem == null);
-    private bool ReadyToConvert => _state != null && _source != null && _sourceModel != null && _state.IsComplete && IpsecComplete;
+    private bool GroupsComplete => _groups == null || _groups.IsComplete;
+    private bool ReadyToConvert => _state != null && _source != null && _sourceModel != null && _state.IsComplete && GroupsComplete && IpsecComplete;
 
     private void LoadCatalog()
     {
@@ -160,6 +242,15 @@ public partial class MainWindow : Window
     public void OpenFile(string fileName)
     {
         if (_catalog == null) return;
+        var checks = new List<StatusLine>();
+        void Show()
+        {
+            if (_source != null && _sourcePath != fileName)
+                checks.Add(new StatusLine($"The previously opened file is still loaded: {_sourcePath}", InfoBrush));
+            CheckList.ItemsSource = checks;
+            GoToStep(0);
+        }
+
         string text;
         try
         {
@@ -167,22 +258,68 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, $"The file could not be opened.\n\n{ex.Message}", "Open config", MessageBoxButton.OK, MessageBoxImage.Error);
+            checks.Add(new StatusLine($"✘ Couldn't read {fileName}: {ex.Message}", ErrorBrush));
+            Show();
             return;
         }
-        if (LoadSource(text, fileName, keepMapping: false))
+        checks.Add(new StatusLine($"✔ Read {Path.GetFileName(fileName)} ({LineDiff.SplitLines(text).Length:N0} lines)", OkBrush));
+
+        var error = LoadSource(text, fileName, keepMapping: false);
+        if (error != null)
         {
-            _fileText = text;
-            _unsavedEdits = false;
-            UpdateEditState();
+            checks.Add(new StatusLine("✘ " + error, ErrorBrush));
+            Show();
+            return;
         }
+        _fileText = text;
+        _unsavedEdits = false;
+        checks.AddRange(SourceChecks());
+        UpdateEditState();
+        Show();
+    }
+
+    /// <summary>What the step-1 check found in the loaded config.</summary>
+    private List<StatusLine> SourceChecks()
+    {
+        var cfg = _source!;
+        var model = _sourceModel!;
+        var lines = new List<StatusLine>
+        {
+            new($"✔ Read as a FortiGate configuration ({cfg.Root.Descendants().Count(n => n.Kind == NodeKind.Config):N0} config sections)", OkBrush),
+            new($"✔ Model: {model.DisplayName} (#platform={cfg.Platform})", OkBrush),
+        };
+        lines.Add(cfg.GetHeader("config-version") != null
+            ? new StatusLine($"✔ Firmware: FortiOS {cfg.FirmwareDescription}", OkBrush)
+            : new StatusLine("⚠ No #config-version header. A file without it may not restore as a backup.", WarnBrush));
+        lines.Add(new StatusLine($"✔ Hostname: {cfg.Hostname ?? "(none)"}", cfg.Hostname != null ? OkBrush : WarnBrush));
+        lines.Add(new StatusLine($"✔ Can be converted to: {string.Join(", ", _catalog!.TargetsFor(model).Select(t => t.DisplayName))}", OkBrush));
+
+        var inUse = model.Ports.Count(p => _usage![p.Name].InUse);
+        lines.Add(new StatusLine($"• {inUse} of {model.Ports.Count} ports carry configuration", InfoBrush));
+        var groups = InterfaceGroups.Find(cfg, model);
+        if (groups.Count > 0)
+            lines.Add(new StatusLine($"• Switch/aggregate interfaces: {string.Join(", ", groups.Select(g => $"{g.Name} ({g.KindLabel}: {string.Join(", ", g.PhysicalMembers)})"))}", InfoBrush));
+        var tunnels = IpsecTunnels.Find(cfg);
+        if (tunnels.Count > 0)
+            lines.Add(new StatusLine($"• {tunnels.Count} IPsec tunnel(s) – {tunnels.Count(t => t.NeedsPsk)} with pre-shared keys that will need new keys", InfoBrush));
+        var policies = cfg.FindConfigs("firewall policy").Sum(c => c.Children.Count(e => e.Kind == NodeKind.Edit));
+        lines.Add(new StatusLine($"• {policies:N0} firewall policies", InfoBrush));
+
+        if (cfg.FindConfigs("system global").FirstOrDefault()?.FindSet("private-data-encryption")?.Values.FirstOrDefault()?.Text == "enable")
+            lines.Add(new StatusLine("⚠ private-data-encryption is enabled: encrypted secrets only load if the new firewall has the same key.", WarnBrush));
+        if (cfg.Root.Children.Any(c => c.Kind == NodeKind.Config && c.Name == "vdom"))
+            lines.Add(new StatusLine("⚠ This config uses multiple VDOMs. Review the converted config carefully.", WarnBrush));
+        if (!model.Verified)
+            lines.Add(new StatusLine($"⚠ The {model.Model} port names come from documentation and haven't been checked against a real config.", WarnBrush));
+        return lines;
     }
 
     /// <summary>
     /// Parses and applies a source config. With <paramref name="keepMapping"/> (an edit of the same model)
     /// the existing port links and IPsec keys are carried over.
     /// </summary>
-    private bool LoadSource(string text, string? path, bool keepMapping)
+    /// <returns>null on success, otherwise why the config can't be used.</returns>
+    private string? LoadSource(string text, string? path, bool keepMapping)
     {
         FortiConfig cfg;
         try
@@ -191,24 +328,17 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, $"This text could not be read as a FortiGate configuration.\n\n{ex.Message}", "Configuration", MessageBoxButton.OK, MessageBoxImage.Error);
-            return false;
+            return $"This isn't a readable FortiGate configuration: {ex.Message}";
         }
 
         var model = _catalog!.FindByPlatform(cfg.Platform);
         if (model == null)
         {
             var supported = string.Join(", ", _catalog.Paths.Select(p => p.Source));
-            MessageBox.Show(this, $"The configuration is for platform \"{cfg.Platform ?? "unknown"}\" (from the #platform= line), which this tool does not convert.\n\nSupported source models: {supported}.",
-                "Unsupported model", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return false;
+            return $"The configuration is for platform \"{cfg.Platform ?? "unknown"}\" (from the #platform= line), which this tool doesn't convert. Supported source models: {supported}.";
         }
         var targets = _catalog.TargetsFor(model);
-        if (targets.Count == 0)
-        {
-            MessageBox.Show(this, $"There are no upgrade paths defined from the {model.Model}.", "Unsupported model", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return false;
-        }
+        if (targets.Count == 0) return $"There are no upgrade paths defined from the {model.Model}.";
 
         var sameModel = keepMapping && _sourceModel == model && _state != null;
         _source = cfg;
@@ -233,6 +363,9 @@ public partial class MainWindow : Window
             _state.CopyFrom(old);
             _state.Changed += OnMappingChanged;
             MapView.State = _state;
+            var oldGroups = _groups;
+            SetGroups(new GroupState(_state, InterfaceGroups.Find(cfg, model)));
+            if (oldGroups != null) _groups!.CopyFrom(oldGroups);
             RefreshTunnels();
             MarkConversionStale();
             RefreshStatus();
@@ -251,8 +384,9 @@ public partial class MainWindow : Window
             TargetCombo.SelectedIndex = -1;
             TargetCombo.SelectedIndex = 0;
         }
+        ModelStepSource.Text = $"Converting {model.DisplayName} \"{cfg.Hostname ?? "(no hostname)"}\" (FortiOS {cfg.FirmwareDescription ?? "?"}).";
         UpdateEditState();
-        return true;
+        return null;
     }
 
     // ------------------------------------------------------------------ step 2: target
@@ -264,12 +398,13 @@ public partial class MainWindow : Window
         if (_state != null) _state.Changed -= OnMappingChanged;
         _state = new MappingState(_sourceModel, target, _usage);
         _state.Changed += OnMappingChanged;
-        _state.AutoMap();
-        MapView.State = _state;
+        MapView.State = _state; // starts unwired: the user drags each connection (or clicks Auto-map)
+        SetGroups(new GroupState(_state, InterfaceGroups.Find(_source!, _sourceModel)));
 
         HostnameBox.Text = SuggestHostname(_source?.Hostname, _sourceModel.Model, target.Model);
         SetPhoto(TargetPhoto, TargetPhotoCaption, target, "New");
-        AutoMapButton.IsEnabled = ClearButton.IsEnabled = true;
+        TargetNote.Text = target.Verified ? "" : $"The {target.Model} port names come from Fortinet documentation and haven't been checked against a real config yet.";
+        AutoMapButton.IsEnabled = ClearButton.IsEnabled = GroupsFromMapButton.IsEnabled = GroupsClearButton.IsEnabled = true;
         ShowPortDetails(null);
         RefreshTunnels();
         MarkConversionStale();
@@ -304,13 +439,70 @@ public partial class MainWindow : Window
         }
     }
 
-    private void HostnameBox_TextChanged(object sender, TextChangedEventArgs e) => MarkConversionStale();
+    private void HostnameBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        // New local IDs follow the hostname until the user types their own.
+        foreach (var row in _tunnelInputs.Values) row.ApplyDefaultLocalId(EffectiveHostname);
+        var h = HostnameBox.Text.Trim();
+        if (HostnameNote != null)
+        {
+            HostnameNote.Text = h.Length > 0 && !IsValidHostname(h)
+                ? "✘ At most 35 characters, with no spaces or quotes."
+                : h.Length == 0 ? $"Blank keeps the current hostname ({_source?.Hostname ?? "none"}). It is also the default IPsec local ID."
+                : "Up to 35 characters, no spaces or quotes. It is also the default IPsec local ID.";
+            HostnameNote.Foreground = h.Length > 0 && !IsValidHostname(h) ? ErrorBrush : InfoBrush;
+        }
+        MarkConversionStale();
+        UpdateNav();
+    }
+
+    /// <summary>The hostname the new firewall will have: the one typed in, or the original if that's blank/invalid.</summary>
+    private string? EffectiveHostname
+    {
+        get
+        {
+            var typed = HostnameBox?.Text.Trim();
+            return !string.IsNullOrEmpty(typed) && IsValidHostname(typed) ? typed : _source?.Hostname;
+        }
+    }
 
     // ------------------------------------------------------------------ step 3: mapping
 
     private void AutoMapButton_Click(object sender, RoutedEventArgs e) => _state?.AutoMap();
 
     private void ClearButton_Click(object sender, RoutedEventArgs e) => _state?.Clear();
+
+    private void SetGroups(GroupState groups)
+    {
+        if (_groups != null) _groups.Changed -= OnGroupsChanged;
+        _groups = groups;
+        _groups.Changed += OnGroupsChanged;
+        GroupView.State = _groups;
+        UpdateGroupsHeader();
+    }
+
+    private void GroupsFromMap_Click(object sender, RoutedEventArgs e) => _groups?.FromPortMapping();
+
+    private void GroupsClear_Click(object sender, RoutedEventArgs e) => _groups?.Clear();
+
+    private void OnGroupsChanged(object? sender, EventArgs e)
+    {
+        RefreshTunnels();
+        MarkConversionStale();
+        RefreshStatus();
+    }
+
+    private void UpdateGroupsHeader()
+    {
+        if (_groups == null) { GroupsTab.Header = "Aggregates & switches"; return; }
+        var problems = _groups.Problems.Count;
+        var empty = _groups.EmptyGroups.Count;
+        GroupsTab.Header = new TextBlock
+        {
+            Text = "Aggregates & switches" + (problems > 0 ? $" ({problems} issue(s))" : empty > 0 ? $" ({empty} without ports)" : _groups.Groups.Count > 0 ? " ✔" : ""),
+            Foreground = problems > 0 ? ErrorBrush : empty > 0 ? WarnBrush : _groups.Groups.Count > 0 ? OkBrush : Brushes.Black,
+        };
+    }
 
     private void OnMappingChanged(object? sender, EventArgs e)
     {
@@ -324,12 +516,25 @@ public partial class MainWindow : Window
     {
         if (_state == null) return;
         var issues = _state.Problems.Select(p => new StatusLine("● " + p, ErrorBrush)).ToList();
+        if (_groups != null)
+            issues.AddRange(_groups.Problems.Select(p => new StatusLine("● " + p + " (step 4, Aggregates & switches)", ErrorBrush)));
         var missingKeys = _currentTunnels.Count(t => t.Problem != null);
         if (missingKeys > 0)
-            issues.Add(new StatusLine($"● {missingKeys} IPsec tunnel(s) need a new local ID and pre-shared key (IPsec keys tab).", ErrorBrush));
+            issues.Add(new StatusLine($"● {missingKeys} IPsec tunnel(s) need a new local ID and pre-shared key (step 5, IPsec keys).", ErrorBrush));
 
         var lines = new List<StatusLine>();
         var mapped = _state.Links.Select(l => l.Source).Distinct().Count();
+        if (mapped == 0)
+        {
+            // Nothing wired yet: one instruction instead of a warning for every port.
+            ProblemList.ItemsSource = new List<StatusLine>
+            {
+                new("Nothing is mapped yet. Drag each port of the current firewall to a port on the new one (or click Auto-map), then assign ports in step 4 (Aggregates & switches).", InfoBrush),
+            };
+            UpdateGroupsHeader();
+            UpdateNav();
+            return;
+        }
         if (issues.Count == 0)
             lines.Add(new StatusLine(_state.UnmappedInUse.Count == 0
                 ? $"✔ Mapping complete – {mapped} ports mapped. Ready to export."
@@ -341,16 +546,18 @@ public partial class MainWindow : Window
         }
         foreach (var w in _state.Warnings)
             lines.Add(new StatusLine("⚠ " + w, WarnBrush));
+        if (_groups != null)
+            foreach (var w in _groups.Warnings)
+                lines.Add(new StatusLine("⚠ " + w, WarnBrush));
 
         if (OriginalDirty)
-            lines.Add(new StatusLine("⚠ The original config has edits that are not applied yet (Compare & edit tab).", WarnBrush));
+            lines.Add(new StatusLine("⚠ The original config has edits that are not applied yet (step 6, Compare & edit).", WarnBrush));
         if (!_state.Target.Verified)
             lines.Add(new StatusLine($"⚠ The {_state.Target.Model} port names come from Fortinet documentation and have not been checked against a real config.", WarnBrush));
 
         ProblemList.ItemsSource = lines;
-        ExportButton.IsEnabled = issues.Count == 0;
-        ExportStatus.Text = issues.Count == 0 ? "" :
-            _state.IsComplete ? "Enter the IPsec keys to enable export." : "Resolve the issues on the right to enable export.";
+        UpdateGroupsHeader();
+        UpdateNav();
     }
 
     private void ShowPortDetails(PortRef? port)
@@ -373,8 +580,10 @@ public partial class MainWindow : Window
         if (port.Side == PanelSide.Source)
         {
             var links = _state.Links.Where(l => l.Source == def.Name).Select(l => l.Target).ToList();
-            sb.AppendLine(links.Count > 0 ? $"Goes to: {string.Join(", ", links)}" : "Not mapped – it won't be converted.");
             var u = _state.Usage[def.Name];
+            sb.AppendLine(links.Count > 0 ? $"Goes to: {string.Join(", ", links)}"
+                : u.OnlyGroupMember ? $"Only a member of {string.Join(", ", u.Groups)} – choose that group's new ports in step 4 (Aggregates & switches)."
+                : "Not mapped – it won't be converted.");
             sb.AppendLine();
             sb.AppendLine(u.Summary);
             var refs = u.References.Where(r => !r.IsDefinition).ToList();
@@ -410,7 +619,7 @@ public partial class MainWindow : Window
         {
             var all = IpsecTunnels.Find(_source).Where(t => t.NeedsPsk).ToList();
             tunnels = all;
-            if (!_state.Problems.Any())
+            if (!_state.Problems.Any() && GroupsComplete)
             {
                 try
                 {
@@ -430,6 +639,7 @@ public partial class MainWindow : Window
             if (!_tunnelInputs.TryGetValue(t.Key, out var row))
             {
                 row = new TunnelInput(t);
+                row.ApplyDefaultLocalId(EffectiveHostname); // before hooking Edited: no refresh storm while listing
                 row.Edited += (_, _) => { MarkConversionStale(); RefreshStatus(); UpdateIpsecHeader(); };
                 _tunnelInputs[t.Key] = row;
             }
@@ -473,6 +683,7 @@ public partial class MainWindow : Window
             TargetModel = _state!.Target,
             Mapping = _state.ToMapping(),
             Ipsec = _tunnelInputs.ToDictionary(kv => kv.Key, kv => kv.Value.Credentials),
+            GroupMembers = _groups?.ToMembers(),
             RequireIpsecCredentials = requireKeys,
             NewHostname = string.IsNullOrEmpty(hostname) || hostname == _source!.Hostname || !IsValidHostname(hostname) ? null : hostname,
         };
@@ -485,7 +696,9 @@ public partial class MainWindow : Window
     private bool ApplyOriginal()
     {
         if (!OriginalDirty) return true;
-        return LoadSource(OriginalEditor.Text, null, keepMapping: true);
+        var error = LoadSource(OriginalEditor.Text, null, keepMapping: true);
+        if (error != null) MessageBox.Show(this, error, "Apply changes", MessageBoxButton.OK, MessageBoxImage.Error);
+        return error == null;
     }
 
     private void RevertOriginal_Click(object sender, RoutedEventArgs e)
@@ -501,7 +714,8 @@ public partial class MainWindow : Window
         if (_fileText == null) return;
         if (MessageBox.Show(this, "Discard your edits to the original config and use the file as it was loaded?", "Reload from file",
                 MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
-        LoadSource(_fileText, null, keepMapping: true);
+        var error = LoadSource(_fileText, null, keepMapping: true);
+        if (error != null) MessageBox.Show(this, error, "Reload from file", MessageBoxButton.OK, MessageBoxImage.Error);
     }
 
     private void SaveOriginal_Click(object sender, RoutedEventArgs e)
@@ -599,9 +813,10 @@ public partial class MainWindow : Window
     private void Tabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (e.Source != Tabs || SidePanel == null) return;
-        // The side panel only describes the port map; give the other tabs the full width.
-        SidePanel.Visibility = Tabs.SelectedItem == MapTab ? Visibility.Visible : Visibility.Collapsed;
+        UpdateSidePanel();
         if (Tabs.SelectedItem == CompareTab) RefreshOutputViews();
+        if (Tabs.SelectedItem == SummaryStep) RefreshSummary();
+        UpdateNav();
     }
 
     private void RefreshOutputViews()
@@ -728,8 +943,10 @@ public partial class MainWindow : Window
                 ? "Open a configuration and complete the port mapping to see the converted config."
                 : !_state.IsComplete
                     ? "Fix the port mapping (no red lines) to see the converted config."
+                    : !GroupsComplete
+                        ? "Fix the red lines in step 4 (Aggregates & switches) to see the converted config."
                     : !IpsecComplete
-                        ? "Enter a new local ID and pre-shared key for every tunnel on the IPsec keys tab to see the converted config."
+                        ? "Enter a new local ID and pre-shared key for every tunnel in step 5 (IPsec keys) to see the converted config."
                         : "Generating…");
 
         if (_result != null)
@@ -747,6 +964,52 @@ public partial class MainWindow : Window
         else MessagesExpander.Visibility = Visibility.Collapsed;
 
         if (_state != null) RefreshStatus();
+        UpdateNav();
+    }
+
+    // ------------------------------------------------------------------ step 7: summary
+
+    private void RefreshSummary()
+    {
+        System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
+        try { EnsureConverted(); }
+        finally { System.Windows.Input.Mouse.OverrideCursor = null; }
+        UpdateEditState();
+
+        var lines = new List<StatusLine>();
+        if (_state == null || _sourceModel == null || _source == null)
+        {
+            SummaryList.ItemsSource = new[] { new StatusLine("Open a configuration first.", InfoBrush) };
+            ExportButton.IsEnabled = false;
+            return;
+        }
+        lines.Add(new StatusLine($"From {_sourceModel.DisplayName} \"{_source.Hostname}\" to {_state.Target.DisplayName} \"{EffectiveHostname}\", keeping FortiOS {_source.FirmwareDescription}.", InfoBrush));
+        lines.Add(new StatusLine("Ports: " + string.Join(",  ", _state.Links.Select(l => $"{l.Source} → {l.Target}")), InfoBrush));
+        var notConverted = _sourceModel.Ports.Where(p => _state.StatusOfSource(p.Name) == SourcePortStatus.UnmappedInUse).Select(p => p.Name).ToList();
+        if (notConverted.Count > 0)
+            lines.Add(new StatusLine($"⚠ Not converted (settings removed): {string.Join(", ", notConverted)}", WarnBrush));
+        if (_groups != null)
+            foreach (var (g, ports) in _groups.ToMembers())
+                lines.Add(ports.Count > 0
+                    ? new StatusLine($"{g} ({_groups.FindGroup(g)!.KindLabel}): {string.Join(", ", ports)}", InfoBrush)
+                    : new StatusLine($"⚠ {g} ({_groups.FindGroup(g)!.KindLabel}): no ports – not converted", WarnBrush));
+        if (_currentTunnels.Count > 0)
+            lines.Add(new StatusLine($"IPsec: {_currentTunnels.Count} tunnel(s) get a new local ID and pre-shared key ({string.Join(", ", _currentTunnels.Select(t => $"{t.Title} → {t.LocalId}"))}). The keys are in the .conf in clear text.", InfoBrush));
+        if (OriginalEdited || OriginalDirty) lines.Add(new StatusLine("⚠ The original config was edited in the app" + (OriginalDirty ? " (and has edits that aren't applied yet)." : "."), WarnBrush));
+        if (ConvertedEdited) lines.Add(new StatusLine("⚠ The converted config was edited by hand.", WarnBrush));
+
+        if (_result != null)
+        {
+            var errors = _result.Messages.Count(m => m.Severity == Severity.Error);
+            var warnings = _result.Messages.Count(m => m.Severity == Severity.Warning);
+            lines.Add(new StatusLine($"{_result.Renames.Count} interface references renamed, {errors} error(s), {warnings} warning(s):", errors > 0 ? ErrorBrush : InfoBrush));
+            foreach (var m in _result.Messages.Where(m => m.Severity != Severity.Info).OrderByDescending(m => m.Severity))
+                lines.Add(new StatusLine($"   {(m.Severity == Severity.Error ? "✘" : "⚠")} {m.Message}", m.Severity == Severity.Error ? ErrorBrush : WarnBrush));
+        }
+        else if (_conversionError != null) lines.Add(new StatusLine("✘ " + _conversionError, ErrorBrush));
+
+        SummaryList.ItemsSource = lines;
+        ExportButton.IsEnabled = ReadyToConvert && (_result != null || ConvertedEdited);
     }
 
     // ------------------------------------------------------------------ step 4: export
@@ -844,7 +1107,7 @@ public partial class MainWindow : Window
 
         var warnings = _result.Messages.Count(m => m.Severity == Severity.Warning);
         var keys = _result.UpdatedTunnels.Count;
-        ExportStatus.Text = $"Saved {Path.GetFileName(dlg.FileName)}";
+        ExportResult.Text = $"Saved {dlg.FileName} and the report.";
         var open = MessageBox.Show(this,
             $"Saved:\n{dlg.FileName}\n{reportPath}\n\n" +
             $"{_result.Renames.Count} interface references renamed, {errors.Count} error(s), {warnings} warning(s)." +
@@ -904,7 +1167,18 @@ public sealed class TunnelInput : INotifyPropertyChanged
     public string LocalId
     {
         get => _localId;
-        set { if (_localId == value) return; _localId = value; OnEdited(); }
+        set { if (_localId == value) return; _localId = value; _localIdIsDefault = false; OnEdited(); }
+    }
+
+    /// <summary>True while the local ID is the automatic default (the new hostname), i.e. not typed by the user.</summary>
+    private bool _localIdIsDefault = true;
+
+    /// <summary>Sets the local ID to <paramref name="hostname"/> unless the user has typed their own.</summary>
+    public void ApplyDefaultLocalId(string? hostname)
+    {
+        if (!_localIdIsDefault || string.IsNullOrEmpty(hostname) || hostname == _localId) return;
+        _localId = hostname;
+        OnEdited();
     }
 
     public string PreSharedKey

@@ -12,7 +12,7 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>FortiGateUpgrader</AssemblyName>
     <Product>FortiGate Config Upgrader</Product>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <!-- Exe icon, rendered from Assets/fortinet.svg -->
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
